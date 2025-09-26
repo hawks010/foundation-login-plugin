@@ -3,7 +3,7 @@
  * Plugin Name:       Foundation Inkfire Login
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Replaces the WordPress login screen with the Inkfire two‑column layout (contact panel + login card). Fully responsive, accessible, and supports Login, Lost Password, Reset Password, and Register flows inline. Language switcher under socials. Core #login output is hidden for these actions to avoid duplicate markup/IDs.
- * Version:           1.8.0
+ * Version:           1.8.1
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
@@ -35,7 +35,7 @@ if (!defined('IF_ORANGE')) define('IF_ORANGE', '#e27200');  // pill hover
    Initialize Updater
    ========================================================================== */
 
-// Load the self-hosted updater.
+// Load the self-hosted updater from the inc folder.
 require_once( __DIR__ . '/inc/ifls-updater.php' );
 
 
@@ -256,7 +256,6 @@ function ifls_render_login_layout() {
   <div class="if-full-bg">
     <div class="if-shell" role="region" aria-label="<?php esc_attr_e('Inkfire login area', 'inkfire-login-styler'); ?>">
 
-      <!-- RIGHT (logo + card) appears first on mobile; desktop order via grid areas -->
       <main class="if-right" role="main">
         <div class="if-logo-wrap">
           <img class="if-logo" src="<?php echo esc_url(INKFIRE_LOGIN_LOGO); ?>" alt="<?php esc_attr_e('Inkfire', 'inkfire-login-styler'); ?>" decoding="async" />
@@ -293,7 +292,6 @@ function ifls_render_login_layout() {
         </section>
       </main>
 
-      <!-- LEFT contact panel -->
       <aside class="if-left" role="complementary" aria-label="<?php esc_attr_e('Contact information', 'inkfire-login-styler'); ?>">
         <div class="if-left-block">
           <img class="if-icon" src="<?php echo esc_url(INKFIRE_LOGIN_ICON); ?>" alt="" decoding="async" />
@@ -537,17 +535,3 @@ add_action('login_footer', '__return_null');
 add_filter('login_redirect', 'ifls_secure_login_redirect', 10, 3);
 add_filter('plugin_row_meta', 'ifls_plugin_row_meta', 10, 2);
 add_action('admin_enqueue_scripts', 'ifls_enqueue_admin_styles');
-
-
-/* ==========================================================================
-   Self-Hosted Plugin Updater
-   ========================================================================== */
-
-require_once( __DIR__ . '/plugin-update-checker/plugin-update-checker.php');
-use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
-
-$myUpdateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/hawks010/foundation-login-plugin/',
-    __FILE__,
-    'foundation-inkfire-login'
-);
