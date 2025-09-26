@@ -1,9 +1,11 @@
 <?php
 /**
  * Plugin Name:       Foundation Inkfire Login
+ * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Replaces the WordPress login screen with the Inkfire two‑column layout (contact panel + login card). Fully responsive, accessible, and supports Login, Lost Password, Reset Password, and Register flows inline. Language switcher under socials. Core #login output is hidden for these actions to avoid duplicate markup/IDs.
- * Version:           1.6.0
+ * Version:           1.8.0
  * Author:            Inkfire
+ * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
  * Requires PHP:      7.4
  * Requires at least: 5.8
@@ -27,6 +29,14 @@ if (!defined('IF_TEAL2'))  define('IF_TEAL2',  '#1e6167');
 if (!defined('IF_PILL'))   define('IF_PILL',   '#fbccbf');  // salmon pill (primary button + title pill)
 if (!defined('IF_TEXT'))   define('IF_TEXT',   '#111111');
 if (!defined('IF_ORANGE')) define('IF_ORANGE', '#e27200');  // pill hover
+
+
+/* ==========================================================================
+   Initialize Updater
+   ========================================================================== */
+
+// Load the self-hosted updater.
+require_once( __DIR__ . '/inc/ifls-updater.php' );
 
 
 /* ==========================================================================
@@ -76,34 +86,22 @@ function ifls_login_body_class($classes) {
 /**
  * Filters the login redirect URL to ensure a sane, secure default.
  *
- * This makes the redirect "bulletproof" by validating any requested redirect URL.
- * If no redirect is requested or if it's invalid, it defaults to the wp-admin
- * dashboard, with a final fallback to the homepage.
- *
  * @since 1.5.0
- *
  * @param string           $redirect_to           The URL to redirect to.
  * @param string           $requested_redirect_to The URL the user wanted to redirect to.
  * @param WP_User|WP_Error $user                  WP_User object on success, WP_Error on failure.
  * @return string The final, safe redirect URL.
  */
 function ifls_secure_login_redirect($redirect_to, $requested_redirect_to, $user) {
-    // Bail out if there was a login error or the user object is invalid.
     if (is_wp_error($user) || !is_a($user, 'WP_User')) {
         return $redirect_to;
     }
-
-    // If a specific redirect was requested, validate it to ensure it's a local URL.
-    // This prevents open redirect vulnerabilities.
     if (!empty($requested_redirect_to)) {
         $validated_url = wp_validate_redirect($requested_redirect_to, '');
         if (!empty($validated_url)) {
             return $validated_url;
         }
     }
-
-    // For all other cases (no redirect, or an unsafe one), default to the admin dashboard.
-    // As a final fallback, use the homepage if admin_url() is unavailable.
     return admin_url() ? admin_url() : home_url('/');
 }
 
@@ -232,9 +230,6 @@ function ifls_render_inline_form($action) {
 
 /**
  * Renders the entire custom login page layout.
- *
- * This function is hooked into `login_header` to output all custom HTML before
- * the default WordPress login form, which is then hidden via CSS.
  *
  * @since 1.4.0
  */
@@ -533,20 +528,26 @@ function ifls_plugin_row_meta($links, $file) {
    Hook into WordPress
    ========================================================================== */
 
-// --- Basic Login Page Modifications ---
 add_filter('login_headerurl', 'ifls_login_header_url');
 add_filter('login_headertext', 'ifls_login_header_text');
 add_filter('login_body_class', 'ifls_login_body_class');
-
-// --- Main Layout and Styling ---
 add_action('login_header', 'ifls_render_login_layout');
 add_action('login_enqueue_scripts', 'ifls_enqueue_login_styles');
-add_action('login_footer', '__return_null'); // The layout wrapper is closed in the header action.
-
-// --- Functionality & Security ---
+add_action('login_footer', '__return_null');
 add_filter('login_redirect', 'ifls_secure_login_redirect', 10, 3);
-
-// --- Admin Area ---
 add_filter('plugin_row_meta', 'ifls_plugin_row_meta', 10, 2);
-add_action('admin_enqueue_scripts', 'ifls_enqueue_admin_styles'); // Styles for the session timeout modal.
+add_action('admin_enqueue_scripts', 'ifls_enqueue_admin_styles');
 
+
+/* ==========================================================================
+   Self-Hosted Plugin Updater
+   ========================================================================== */
+
+require_once( __DIR__ . '/plugin-update-checker/plugin-update-checker.php');
+use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
+
+$myUpdateChecker = PucFactory::buildUpdateChecker(
+    'https://github.com/hawks010/foundation-login-plugin/',
+    __FILE__,
+    'foundation-inkfire-login'
+);
