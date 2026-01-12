@@ -76,7 +76,7 @@ function ifls_login_body_class($classes) {
 
     // Add a helper class for actions where we render the form inside our custom card.
     // This is used to hide the default WordPress form.
-    $inline_actions = ['login', 'lostpassword', 'retrievepassword', 'rp', 'resetpass', 'register'];
+    $inline_actions = ['login', 'lostpassword', 'retrievepassword', 'rp', 'resetpass', 'register', 'confirm_admin_email'];
     if (in_array($action, $inline_actions, true)) {
         $classes[] = 'inkfire-inline-form';
     }
