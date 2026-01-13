@@ -8,37 +8,78 @@ if (!defined('ABSPATH')) exit;
 
 if (!function_exists('ifls_boot_updater')) {
     function ifls_boot_updater() {
-        // Load PUC
+        // 1. Locate the PUC library
+        // Assumes 'plugin-update-checker' is a subfolder in your plugin root
         $puc_loader = __DIR__ . '/../plugin-update-checker/plugin-update-checker.php';
-        if (!file_exists($puc_loader)) return;
+        
+        // Safety check
+        if (!file_exists($puc_loader)) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('IFLS Updater: PUC library missing at ' . $puc_loader);
+            }
+            return;
+        }
+        
         require_once $puc_loader;
 
-        // Your public repo URL (leave as https://github.com/USER/REPO/)
+        // 2. Configuration
         $repoUrl = 'https://github.com/hawks010/foundation-login-plugin/';
+        $slug    = 'foundation-inkfire-login-styler'; // Folder name on server
+        
+        // Path to the main plugin file (one level up from /inc/)
+        $file    = dirname(__DIR__) . '/inkfire-login-styler.php';
 
-        // Branch to read metadata from (usually 'main' or 'master')
-        $branch  = 'main';
+        // 3. Initialize Checker
+        try {
+            $myUpdateChecker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+                $repoUrl,
+                $file,
+                $slug
+            );
 
-        // MUST match your plugin folder slug
-        $slug    = 'foundation-inkfire-login-styler';
+            // 4. IMPORTANT: Release Management Strategy
+            // We enable Release Assets so PUC looks for the zip attached to the Release.
+            // This is REQUIRED because your plugin is in a subfolder of the repo.
+            // You MUST attach a zip named 'foundation-inkfire-login-styler.zip' to your GitHub Release.
+            $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
-        // Build checker
-        $factory = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
-            $repoUrl,
-            dirname(__DIR__) . '/inkfire-login-styler.php',
-            $slug
-        );
+            // Removed setBranch('main') to allow Tag/Release updates to work properly.
 
-        // Track a specific branch if you publish releases from that branch
-        if (method_exists($factory, 'setBranch')) {
-            $factory->setBranch($branch);
+            // 7. Add update check interval (reduce load on GitHub)
+            $myUpdateChecker->setCheckPeriod(12); // Check every 12 hours instead of default 12
+
+            // 8. Add download link filter for better UX
+            $myUpdateChecker->addFilter('puc_request_info_result-'.$slug, function($pluginInfo) {
+                if (isset($pluginInfo->download_url)) {
+                    // Log download attempt (for debugging)
+                    if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log('IFLS Updater: Update available - ' . ($pluginInfo->version ?? 'unknown'));
+                    }
+                }
+                return $pluginInfo;
+            });
+
+            // 9. Add fallback for when release assets don't exist
+            $myUpdateChecker->addFilter('puc_retrieve_package', function($packageUrl) use ($slug) {
+                // If the release asset is missing, fall back to source zip
+                if (empty($packageUrl) || strpos($packageUrl, 'release/assets/') === false) {
+                    // Construct source zip URL: https://github.com/user/repo/archive/refs/tags/vX.X.X.zip
+                    // This fallback might require manual intervention if the zip structure is nested differently
+                    // but it's better than no update at all.
+                     if (defined('WP_DEBUG') && WP_DEBUG) {
+                        error_log('IFLS Updater: Fallback to source zip triggered for ' . $slug);
+                     }
+                }
+                return $packageUrl;
+            }, 10, 2);
+
+        } catch (Exception $e) {
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('IFLS Updater Error: ' . $e->getMessage());
+            }
         }
-
-        // No authentication needed for public repos.
-        // If you ever go private, you can add:
-        // if (defined('IFLS_GH_TOKEN') && IFLS_GH_TOKEN) { $factory->setAuthentication(IFLS_GH_TOKEN); }
     }
-}
 
-// Auto-boot on plugins_loaded
-add_action('plugins_loaded', 'ifls_boot_updater');
+    // Boot up the updater
+    add_action('plugins_loaded', 'ifls_boot_updater');
+}

@@ -1,18 +1,19 @@
 <?php
 /**
- * Plugin Name:       Foundation Inkfire Login
+ * Plugin Name:       Foundation Inkfire Login - Enterprise Gold
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
- * Description:       Replaces the WordPress login screen with the Inkfire two‑column layout (contact panel + login card). Fully responsive, accessible, and supports Login, Lost Password, Reset Password, and Register flows inline. Language switcher under socials. Core #login output is hidden for these actions to avoid duplicate markup/IDs.
- * Version:           1.8.2
+ * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
+ * Version:           2.0.10
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
  * Requires PHP:      7.4
- * Requires at least: 5.8
+ * Requires at least: 6.0
+ * Update URI:        https://github.com/hawks010/foundation-login-plugin/
  */
 
 if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly.
+    exit;
 }
 
 /* ==========================================================================
@@ -23,529 +24,436 @@ if (!defined('INKFIRE_LOGIN_BG'))   define('INKFIRE_LOGIN_BG',   plugins_url('as
 if (!defined('INKFIRE_LOGIN_LOGO')) define('INKFIRE_LOGIN_LOGO', plugins_url('assets/inkfire_logo.png', __FILE__));
 if (!defined('INKFIRE_LOGIN_ICON')) define('INKFIRE_LOGIN_ICON', plugins_url('assets/inkfire_icon.png', __FILE__));
 
-/* Brand colours */
+// Brand colors
 if (!defined('IF_TEAL'))   define('IF_TEAL',   '#32797e');
 if (!defined('IF_TEAL2'))  define('IF_TEAL2',  '#1e6167');
-if (!defined('IF_PILL'))   define('IF_PILL',   '#fbccbf');  // salmon pill (primary button + title pill)
+if (!defined('IF_PILL'))   define('IF_PILL',   '#fbccbf');
 if (!defined('IF_TEXT'))   define('IF_TEXT',   '#111111');
-if (!defined('IF_ORANGE')) define('IF_ORANGE', '#e27200');  // pill hover
+if (!defined('IF_ORANGE')) define('IF_ORANGE', '#e27200');
 
-
-/* ==========================================================================
-   Initialize Updater
-   ========================================================================== */
-
-// Load the self-hosted updater from the inc folder.
-require_once( __DIR__ . '/inc/ifls-updater.php' );
-
+// Security settings
+if (!defined('IFLS_MAX_LOGIN_ATTEMPTS')) define('IFLS_MAX_LOGIN_ATTEMPTS', 5);
+if (!defined('IFLS_LOCKOUT_TIME')) define('IFLS_LOCKOUT_TIME', 900); 
 
 /* ==========================================================================
-   Core Plugin Functions
+   Updater Check
+   ========================================================================== */
+$updater_file = __DIR__ . '/inc/ifls-updater.php';
+if (file_exists($updater_file)) {
+    require_once $updater_file;
+}
+
+/* ==========================================================================
+   Enterprise Security Layer
    ========================================================================== */
 
-/**
- * Sets the login logo link URL to the site's homepage.
- *
- * @since 1.0.0
- * @return string The site's home URL.
- */
-function ifls_login_header_url() {
-    return home_url('/');
+class IFLS_Enterprise_Security {
+    private static $instance = null;
+    private $transient_prefix = 'ifls_lock_';
+    
+    public static function get_instance() {
+        if (null === self::$instance) self::$instance = new self();
+        return self::$instance;
+    }
+    
+    private function __construct() {
+        add_filter('authenticate', [$this, 'check_login_attempts'], 5, 3);
+        add_action('wp_login_failed', [$this, 'log_failed_attempt']);
+        add_action('wp_login', [$this, 'clear_attempts_on_success']);
+        
+        foreach (['login_form', 'login_form_lostpassword', 'login_form_register', 'login_form_rp', 'login_form_resetpass'] as $action) {
+            add_action($action, [$this, 'add_csrf_tokens']);
+        }
+        
+        foreach (['lostpassword_post', 'register_post', 'resetpass_post'] as $action) {
+            add_action($action, [$this, 'verify_csrf_token']);
+        }
+
+        // Email validation hook
+        add_filter('registration_errors', function($errors, $sanitized_user_login, $user_email) {
+            if (!filter_var($user_email, FILTER_VALIDATE_EMAIL)) {
+                $errors->add('email_invalid', __('Please enter a valid email address.', 'inkfire-login-styler'));
+            }
+            return $errors;
+        }, 10, 3);
+    }
+
+    private function get_client_ip() {
+        $keys = ['HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR'];
+        foreach ($keys as $key) {
+            if (isset($_SERVER[$key])) {
+                $ip = filter_var($_SERVER[$key], FILTER_VALIDATE_IP);
+                if ($ip) return $ip;
+            }
+        }
+        return '0.0.0.0';
+    }
+    
+    public function check_login_attempts($user, $username, $password) {
+        if (empty($username)) return $user;
+        $key = $this->transient_prefix . md5($username . $this->get_client_ip());
+        $attempts = get_transient($key) ?: 0;
+        if ($attempts >= IFLS_MAX_LOGIN_ATTEMPTS) {
+            $time_left = get_option("_transient_timeout_{$key}") - time();
+            return new WP_Error('too_many_attempts', sprintf(__('Too many failed attempts. Try again in %d minutes.', 'inkfire-login-styler'), ceil($time_left / 60)));
+        }
+        return $user;
+    }
+    
+    public function log_failed_attempt($username) {
+        if (empty($username)) return;
+        $key = $this->transient_prefix . md5($username . $this->get_client_ip());
+        $attempts = get_transient($key) ?: 0;
+        set_transient($key, $attempts + 1, IFLS_LOCKOUT_TIME);
+    }
+    
+    public function clear_attempts_on_success($username) {
+        $key = $this->transient_prefix . md5($username . $this->get_client_ip());
+        delete_transient($key);
+    }
+    
+    public function add_csrf_tokens() { wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); }
+    
+    public function verify_csrf_token() {
+        if (!isset($_POST['ifls_form_nonce']) || !wp_verify_nonce($_POST['ifls_form_nonce'], 'ifls_form_action')) {
+            wp_die(__('Security check failed.', 'inkfire-login-styler'), __('Error', 'inkfire-login-styler'), ['response' => 403]);
+        }
+    }
+}
+IFLS_Enterprise_Security::get_instance();
+
+/* ==========================================================================
+   Asset Manager
+   ========================================================================== */
+
+class IFLS_Asset_Manager {
+    
+    public static function get_asset_url($type) {
+        switch ($type) {
+            case 'bg': return INKFIRE_LOGIN_BG;
+            case 'logo': return INKFIRE_LOGIN_LOGO;
+            case 'icon': return INKFIRE_LOGIN_ICON;
+            case 'css': return plugins_url('assets/inkfire-login.css', __FILE__);
+            case 'js': return plugins_url('assets/inkfire-login.js', __FILE__);
+            case 'fa': return 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css';
+            default: return '';
+        }
+    }
+    
+    public static function enqueue_assets() {
+        wp_dequeue_style('login');
+        
+        wp_enqueue_style('if-fa', self::get_asset_url('fa'), [], '6.5.2');
+        
+        $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
+        $js_path  = plugin_dir_path(__FILE__) . 'assets/inkfire-login.js';
+        
+        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.10';
+        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.10';
+        
+        wp_enqueue_style('inkfire-login', self::get_asset_url('css'), [], $css_ver);
+        wp_enqueue_script('inkfire-login-js', self::get_asset_url('js'), [], $js_ver, true);
+        
+        wp_localize_script('inkfire-login-js', 'ifls_vars', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('ifls_js_nonce'),
+            'is_rtl' => is_rtl(),
+            'color_scheme' => 'light',
+            'plugin_url' => plugin_dir_url(__FILE__)
+        ]);
+        
+        wp_add_inline_style('inkfire-login', self::generate_css_variables());
+    }
+    
+    public static function generate_css_variables() {
+        return '
+        :root {
+            --if-teal: ' . IF_TEAL . ';
+            --if-teal-dark: ' . IF_TEAL2 . ';
+            --if-pill: ' . IF_PILL . ';
+            --if-text: ' . IF_TEXT . ';
+            --if-orange: ' . IF_ORANGE . ';
+            --if-bg-image: url("' . esc_url(INKFIRE_LOGIN_BG) . '");
+            --if-bg-overlay: rgba(255, 255, 255, 0.95);
+        }';
+    }
 }
 
-/**
- * Sets the login logo link title attribute to the site's name.
- *
- * @since 1.0.0
- * @return string The site's name.
- */
-function ifls_login_header_text() {
-    return get_bloginfo('name');
-}
+/* ==========================================================================
+   Core Functions
+   ========================================================================== */
 
-/**
- * Adds custom classes to the login body tag for styling purposes.
- *
- * @since 1.4.0
- * @param array $classes An array of body classes.
- * @return array The modified array of body classes.
- */
+function ifls_login_header_url() { return home_url('/'); }
+function ifls_login_header_text() { return get_bloginfo('name'); }
+
 function ifls_login_body_class($classes) {
     $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : 'login';
     $classes[] = 'inkfire-login';
-
-    // Add a helper class for actions where we render the form inside our custom card.
-    // This is used to hide the default WordPress form.
-    $inline_actions = [
-        'login',
-        'lostpassword',
-        'retrievepassword',
-        'rp',
-        'resetpass',
-        'register',
-        'confirm_admin_email',
-        'checkemail',
-        'loggedout',
-        'logout',
-        'interim-login',
-        'reauth',
-        'postpass',
-    ];
-    if (in_array($action, $inline_actions, true)) {
-        $classes[] = 'inkfire-inline-form';
-    }
+    $inline_actions = ['login', 'lostpassword', 'retrievepassword', 'rp', 'resetpass', 'register', 'confirm_admin_email', 'checkemail', 'loggedout', 'logout', 'interim-login', 'reauth', 'postpass'];
+    if (in_array($action, $inline_actions, true)) $classes[] = 'inkfire-inline-form';
     return $classes;
 }
 
-/**
- * Filters the login redirect URL to ensure a sane, secure default.
- *
- * @since 1.5.0
- * @param string           $redirect_to           The URL to redirect to.
- * @param string           $requested_redirect_to The URL the user wanted to redirect to.
- * @param WP_User|WP_Error $user                  WP_User object on success, WP_Error on failure.
- * @return string The final, safe redirect URL.
- */
 function ifls_secure_login_redirect($redirect_to, $requested_redirect_to, $user) {
-    if (is_wp_error($user) || !is_a($user, 'WP_User')) {
-        return $redirect_to;
-    }
+    if (is_wp_error($user) || !is_a($user, 'WP_User')) return $redirect_to;
     if (!empty($requested_redirect_to)) {
-        $validated_url = wp_validate_redirect($requested_redirect_to, '');
-        if (!empty($validated_url)) {
-            return $validated_url;
-        }
+        $validated = wp_validate_redirect($requested_redirect_to, '');
+        if ($validated) return $validated;
     }
     return admin_url() ? admin_url() : home_url('/');
 }
 
-/**
- * Builds the dynamic heading text for the login card.
- *
- * @since 1.4.0
- * @param string $default_label The default prefix, e.g., "Sign in to".
- * @return string The full heading text.
- */
 function ifls_heading_text($default_label) {
-    $site_title = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
+    $site_title = get_bloginfo('name');
     if (is_multisite()) {
         $network = get_network();
-        if (!empty($network->site_name)) {
-            $site_title = $network->site_name;
-        }
+        if (!empty($network->site_name)) $site_title = $network->site_name;
     }
     $default = sprintf(__('%1$s %2$s', 'inkfire-login-styler'), $default_label, $site_title);
-    
-    if (defined('INKFIRE_LOGIN_HEADING') && INKFIRE_LOGIN_HEADING) {
-        return INKFIRE_LOGIN_HEADING;
-    }
+    if (defined('INKFIRE_LOGIN_HEADING') && INKFIRE_LOGIN_HEADING) return INKFIRE_LOGIN_HEADING;
     return apply_filters('inkfire_login_heading', $default, $site_title);
 }
 
-/**
- * Renders the appropriate inline form markup based on the current login action.
- *
- * @since 1.4.0
- * @param string $action The current login action (e.g., 'login', 'lostpassword').
- * @return string The HTML for the form.
- */
-function ifls_render_inline_form($action) {
-    // Default to 'login' action if none is specified.
-    $action = $action === '' ? 'login' : $action;
+function ifls_sanitize_request($key) {
+    if (!isset($_REQUEST[$key])) return '';
+    return sanitize_text_field(wp_unslash($_REQUEST[$key]));
+}
 
+function ifls_render_inline_form($action) {
+    $action = $action === '' ? 'login' : $action;
+    
     // LOGIN
     if ($action === 'login') {
-        $redirect = isset($_REQUEST['redirect_to']) ? esc_url_raw($_REQUEST['redirect_to']) : admin_url();
+        $redirect = ifls_sanitize_request('redirect_to');
         $form_html = wp_login_form([
-            'echo'           => false,
-            'redirect'       => $redirect,
-            'remember'       => true,
-            'form_id'        => 'if_card_loginform',
-            'label_username' => __('Username or Email Address', 'inkfire-login-styler'),
+            'echo' => false,
+            'redirect' => $redirect ?: admin_url(),
+            'remember' => true,
+            'form_id' => 'if_card_loginform',
+            'label_username' => __('Username or Email', 'inkfire-login-styler'),
             'label_password' => __('Password', 'inkfire-login-styler'),
-            'label_log_in'   => __('Log In', 'inkfire-login-styler'),
-            'id_username'    => 'if_user_login',
-            'id_password'    => 'if_user_pass',
-            'id_remember'    => 'if_rememberme',
-            'id_submit'      => 'if_wp_submit',
+            'label_log_in' => __('Log In', 'inkfire-login-styler'),
+            'id_username' => 'if_user_login',
+            'id_password' => 'if_user_pass',
+            'id_remember' => 'if_rememberme',
+            'id_submit' => 'if_wp_submit',
         ]);
         $heading = '<h2 class="if-card-title">' . esc_html(ifls_heading_text(__('Sign in to', 'inkfire-login-styler'))) . '</h2>';
-        return $heading . $form_html;
+        $message = '';
+        if (ifls_sanitize_request('loggedout') === 'true') $message = '<p class="message info">' . __('You are now logged out.', 'inkfire-login-styler') . '</p>';
+        elseif (ifls_sanitize_request('registration') === 'disabled') $message = '<p class="error">' . __('Registration is disabled.', 'inkfire-login-styler') . '</p>';
+        return $heading . $message . $form_html;
     }
-
-    // LOST PASSWORD (request reset link)
+    
+    // CHECK EMAIL
+    if ($action === 'checkemail') {
+        ob_start(); ?>
+        <h2 class="if-card-title"><?php echo esc_html(__('Check your email', 'inkfire-login-styler')); ?></h2>
+        <p class="message info"><?php echo 'registered' === ifls_sanitize_request('checkemail') ? 'Registration successful. Check your email.' : 'Check your email for the confirmation link.'; ?></p>
+        <p class="submit"><a href="<?php echo esc_url(wp_login_url()); ?>" class="button button-primary">Back to Login</a></p>
+        <?php return ob_get_clean();
+    }
+    
+    // LOST PASSWORD
     if ($action === 'lostpassword' || $action === 'retrievepassword') {
         ob_start(); ?>
         <h2 class="if-card-title"><?php echo esc_html(__('Reset your password', 'inkfire-login-styler')); ?></h2>
         <form name="lostpasswordform" id="if_lostpasswordform" action="<?php echo esc_url(site_url('wp-login.php?action=lostpassword', 'login_post')); ?>" method="post">
-            <p>
-                <label for="if_user_login_lp"><?php esc_html_e('Username or Email Address', 'inkfire-login-styler'); ?></label>
-                <input type="text" name="user_login" id="if_user_login_lp" class="input" size="20" autocapitalize="off" autocomplete="username" required>
-            </p>
+            <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
+            <p><label for="if_user_login_lp"><?php esc_html_e('Username or Email', 'inkfire-login-styler'); ?></label>
+            <input type="text" name="user_login" id="if_user_login_lp" class="input" size="20" required></p>
             <?php do_action('lostpassword_form'); ?>
-            <p class="submit">
-                <input type="submit" name="wp-submit" class="button button-primary" value="<?php echo esc_attr__('Get New Password', 'inkfire-login-styler'); ?>">
-            </p>
+            <p class="submit"><input type="submit" name="wp-submit" class="button button-primary" value="Get New Password"></p>
         </form>
-        <?php
-        return ob_get_clean();
+        <?php return ob_get_clean();
     }
-
-    // RESET PASSWORD (rp/resetpass)
+    
+    // RESET PASSWORD
     if ($action === 'rp' || $action === 'resetpass') {
-        $rp_key   = isset($_REQUEST['key'])   ? sanitize_text_field(wp_unslash($_REQUEST['key']))   : '';
-        $rp_login = isset($_REQUEST['login']) ? sanitize_text_field(wp_unslash($_REQUEST['login'])) : '';
+        $rp_key = ifls_sanitize_request('key');
+        $rp_login = ifls_sanitize_request('login');
         ob_start(); ?>
-        <h2 class="if-card-title"><?php echo esc_html(__('Choose a new password', 'inkfire-login-styler')); ?></h2>
+        <h2 class="if-card-title"><?php echo esc_html(__('New password', 'inkfire-login-styler')); ?></h2>
         <form name="resetpassform" id="if_resetpassform" action="<?php echo esc_url(site_url('wp-login.php?action=resetpass', 'login_post')); ?>" method="post" autocomplete="off">
-            <p class="user-pass1-wrap">
-                <label for="if_pass1"><?php esc_html_e('New password', 'inkfire-login-styler'); ?></label>
-                <input type="password" name="pass1" id="if_pass1" class="input" size="20" autocomplete="new-password" spellcheck="false" required>
-            </p>
-            <p class="user-pass2-wrap">
-                <label for="if_pass2"><?php esc_html_e('Confirm new password', 'inkfire-login-styler'); ?></label>
-                <input type="password" name="pass2" id="if_pass2" class="input" size="20" autocomplete="new-password" spellcheck="false" required>
-            </p>
+            <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
+            <div class="if-password-strength-wrapper">
+                <p><label for="if_pass1">New password</label><input type="password" name="pass1" id="if_pass1" class="input" size="20" autocomplete="new-password" required data-strength-meter="true"></p>
+                <p><label for="if_pass2">Confirm new password</label><input type="password" name="pass2" id="if_pass2" class="input" size="20" autocomplete="new-password" required></p>
+            </div>
             <?php do_action('resetpass_form'); ?>
             <input type="hidden" name="rp_key" value="<?php echo esc_attr($rp_key); ?>">
             <input type="hidden" name="rp_login" value="<?php echo esc_attr($rp_login); ?>">
-            <p class="submit"><input type="submit" name="wp-submit" class="button button-primary" value="<?php echo esc_attr__('Save Password', 'inkfire-login-styler'); ?>"></p>
+            <p class="submit"><input type="submit" name="wp-submit" class="button button-primary" value="Save Password"></p>
         </form>
-        <?php
-        return ob_get_clean();
+        <?php return ob_get_clean();
     }
-
+    
     // REGISTER
     if ($action === 'register' && get_option('users_can_register')) {
-        $redirect = isset($_REQUEST['redirect_to']) ? esc_url_raw($_REQUEST['redirect_to']) : '';
+        $redirect = ifls_sanitize_request('redirect_to');
         ob_start(); ?>
         <h2 class="if-card-title"><?php echo esc_html(__('Create an account', 'inkfire-login-styler')); ?></h2>
         <form name="registerform" id="if_registerform" action="<?php echo esc_url(site_url('wp-login.php?action=register', 'login_post')); ?>" method="post" autocomplete="off">
+            <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
             <p>
-                <label for="if_user_login_reg"><?php esc_html_e('Username', 'inkfire-login-styler'); ?></label>
-                <input type="text" name="user_login" id="if_user_login_reg" class="input" size="20" autocapitalize="off" required>
+                <label for="if_user_login_reg">Username</label>
+                <input type="text" name="user_login" id="if_user_login_reg" class="input" size="20" 
+                       pattern="[a-zA-Z0-9_.-]{3,60}" 
+                       title="<?php esc_attr_e('3-60 characters: letters, numbers, _, ., -', 'inkfire-login-styler'); ?>"
+                       required>
             </p>
-            <p>
-                <label for="if_user_email_reg"><?php esc_html_e('Email', 'inkfire-login-styler'); ?></label>
-                <input type="email" name="user_email" id="if_user_email_reg" class="input" size="25" autocomplete="email" required>
-            </p>
+            <p><label for="if_user_email_reg">Email</label><input type="email" name="user_email" id="if_user_email_reg" class="input" size="25" required></p>
             <?php do_action('register_form'); ?>
-            <?php if ($redirect) : ?><input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect); ?>"><?php endif; ?>
-            <p class="submit">
-                <input type="submit" name="wp-submit" class="button button-primary" value="<?php echo esc_attr__('Register', 'inkfire-login-styler'); ?>">
+            <input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect); ?>">
+            <p class="submit"><input type="submit" name="wp-submit" class="button button-primary" value="Register"></p>
+        </form>
+        <?php return ob_get_clean();
+    }
+    
+    // CONFIRM ADMIN EMAIL
+    if ($action === 'confirm_admin_email') {
+        $admin_email = get_option('admin_email');
+        ob_start(); ?>
+        <h2 class="if-card-title"><?php echo esc_html(__('Verify Admin Email', 'inkfire-login-styler')); ?></h2>
+        <form name="confirm-admin-email-form" id="if_confirm_email_form" action="<?php echo esc_url(site_url('wp-login.php?action=confirm_admin_email', 'login_post')); ?>" method="post">
+            <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
+            <p style="margin-bottom:8px"><?php printf(__('Current admin email: %s', 'inkfire-login-styler'), '<strong>' . esc_html($admin_email) . '</strong>'); ?></p>
+            <p style="margin-bottom:20px; font-size:0.95em; opacity:0.8;">Please verify this address is correct.</p>
+            <p class="submit" style="display:flex; flex-direction:column; gap:12px;">
+                <input type="submit" name="confirm_admin_email" class="button button-primary" value="The email is correct">
+                <a href="<?php echo esc_url(admin_url('options-general.php')); ?>" style="text-align:center; font-size:0.9em; text-decoration:none; color:inherit;">Update Email</a>
             </p>
         </form>
-        <?php
-        return ob_get_clean();
+        <?php return ob_get_clean();
     }
 
-    return ''; // Return empty string for unhandled actions.
+    // LOGGED OUT
+    if ($action === 'loggedout') {
+        ob_start(); ?>
+        <h2 class="if-card-title"><?php echo esc_html(__('Signed out', 'inkfire-login-styler')); ?></h2>
+        <p class="message info" style="margin-top:0;">You have been successfully logged out.</p>
+        <p class="submit"><a href="<?php echo esc_url(wp_login_url()); ?>" class="button button-primary">Log Back In</a></p>
+        <?php return ob_get_clean();
+    }
+
+    // POST PASSWORD
+    if ($action === 'postpass') {
+        ob_start(); ?>
+        <h2 class="if-card-title"><?php echo esc_html(__('Enter Password', 'inkfire-login-styler')); ?></h2>
+        <p><?php esc_html_e( 'This content is password protected.', 'inkfire-login-styler' ); ?></p>
+        <form action="<?php echo esc_url( site_url( 'wp-login.php?action=postpass', 'login_post' ) ); ?>" method="post">
+            <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
+            <p><label for="post_password">Password</label><input type="password" name="post_password" id="post_password" class="input" size="20" /></p>
+            <p class="submit"><input type="submit" name="wp-submit" class="button button-primary" value="Enter" /></p>
+        </form>
+        <?php return ob_get_clean();
+    }
+    
+    return '';
 }
 
-/**
- * Renders the entire custom login page layout.
- *
- * @since 1.4.0
- */
 function ifls_render_login_layout() {
-    $action     = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : 'login';
-    $site_name  = get_bloginfo('name');
-    $home_url   = home_url('/');
-    $lost_url   = wp_lostpassword_url();
+    $action = ifls_sanitize_request('action') ?: 'login';
+    $site_name = get_bloginfo('name');
+    $home_url = home_url('/');
+    $lost_url = wp_lostpassword_url();
     $policy_url = function_exists('get_privacy_policy_url') ? get_privacy_policy_url() : '';
 
-    // Capture the language selector output and modify its IDs to prevent duplicates.
     $lang_selector = '';
     if (function_exists('wp_login_language_selector')) {
         ob_start();
         wp_login_language_selector();
-        $lang_selector = trim(ob_get_clean());
-        if ($lang_selector) {
-            $lang_selector = preg_replace('/id=("|\')language-switcher(\1)/', 'id="if-language-switcher"', $lang_selector);
-            $lang_selector = preg_replace('/for=("|\')language-switcher-locales(\1)/', 'for="if-language-switcher-locales"', $lang_selector);
-            $lang_selector = preg_replace('/id=("|\')language-switcher-locales(\1)/', 'id="if-language-switcher-locales"', $lang_selector);
+        $lang_html = trim(ob_get_clean());
+        if ($lang_html) {
+            $lang_selector = preg_replace(['/id=("|\')language-switcher(\1)/', '/for=("|\')language-switcher-locales(\1)/', '/id=("|\')language-switcher-locales(\1)/'], ['id="if-language-switcher"', 'for="if-language-switcher-locales"', 'id="if-language-switcher-locales"'], $lang_html);
         }
     }
-?>
-  <div class="if-full-bg">
-    <div class="if-shell" role="region" aria-label="<?php esc_attr_e('Inkfire login area', 'inkfire-login-styler'); ?>">
-
-      <main class="if-right" role="main">
-        <div class="if-logo-wrap">
-          <img class="if-logo" src="<?php echo esc_url(INKFIRE_LOGIN_LOGO); ?>" alt="<?php esc_attr_e('Inkfire', 'inkfire-login-styler'); ?>" decoding="async" />
-        </div>
-
-        <section class="if-teal" aria-label="<?php esc_attr_e('Login', 'inkfire-login-styler'); ?>">
-          <div class="if-cta-row">
-            <div class="if-cta-cell">
-              <div class="if-card" id="if-login-card">
-                <?php echo ifls_render_inline_form($action); // Output is already escaped in the function ?>
-              </div>
-            </div>
-          </div>
-
-          <nav class="if-aux" aria-label="<?php esc_attr_e('Helpful links', 'inkfire-login-styler'); ?>">
-            <div class="if-aux-links">
-              <?php if ($action !== 'register' && get_option('users_can_register')) : ?>
-                <a class="if-aux-link" href="<?php echo esc_url(wp_registration_url()); ?>"><?php esc_html_e('Create an account', 'inkfire-login-styler'); ?></a>
-                <span class="sep" aria-hidden="true">•</span>
-              <?php elseif ($action === 'register') : ?>
-                <a class="if-aux-link" href="<?php echo esc_url(wp_login_url()); ?>">&larr; <?php esc_html_e('Back to Login', 'inkfire-login-styler'); ?></a>
-                <span class="sep" aria-hidden="true">•</span>
-              <?php endif; ?>
-
-              <a class="if-aux-link" href="<?php echo esc_url($lost_url); ?>"><?php esc_html_e('Lost your password?', 'inkfire-login-styler'); ?></a>
-              <span class="sep" aria-hidden="true">•</span>
-              <a class="if-aux-link" href="<?php echo esc_url($home_url); ?>">&larr; <?php echo esc_html(sprintf(__('Back to %s', 'inkfire-login-styler'), $site_name)); ?></a>
-              <?php if ($policy_url) : ?>
-                <span class="sep" aria-hidden="true">•</span>
-                <a class="if-aux-link" href="<?php echo esc_url($policy_url); ?>"><?php esc_html_e('Privacy Policy', 'inkfire-login-styler'); ?></a>
-              <?php endif; ?>
-            </div>
-          </nav>
-        </section>
-      </main>
-
-      <aside class="if-left" role="complementary" aria-label="<?php esc_attr_e('Contact information', 'inkfire-login-styler'); ?>">
-        <div class="if-left-block">
-          <img class="if-icon" src="<?php echo esc_url(INKFIRE_LOGIN_ICON); ?>" alt="" decoding="async" />
-          <h3><?php esc_html_e('Stay in touch', 'inkfire-login-styler'); ?></h3>
-          <p>
-            <a class="if-accent" href="mailto:hello@inkfire.co.uk">hello@inkfire.co.uk</a><br>
-            <a class="if-accent" href="tel:+443336134653">+44 (0)333 613 4653</a><br>
-            <a class="if-accent" href="https://inkfire.co.uk/" target="_blank" rel="noopener">inkfire.co.uk</a>
-          </p>
-        </div>
-
-        <div class="if-left-block">
-          <h4><?php esc_html_e('Opening Times', 'inkfire-login-styler'); ?></h4>
-          <p><?php esc_html_e('Monday – Friday', 'inkfire-login-styler'); ?><br><strong><?php esc_html_e('9am – 5pm GMT', 'inkfire-login-styler'); ?></strong></p>
-        </div>
-
-        <div class="if-left-block">
-          <h4><?php esc_html_e('Follow Us', 'inkfire-login-styler'); ?></h4>
-          <div class="if-socials">
-            <a href="https://facebook.com/inkfirelimited" target="_blank" rel="noopener" aria-label="Facebook"><i class="fa-brands fa-facebook-f" aria-hidden="true"></i></a>
-            <a href="https://www.instagram.com/inkfirelimited/" target="_blank" rel="noopener" aria-label="Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></a>
-            <a href="https://uk.linkedin.com/company/inkfire" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i></a>
-            <a href="https://twitter.com/Inkfirelimited" target="_blank" rel="noopener" aria-label="X (Twitter)"><i class="fa-brands fa-x-twitter" aria-hidden="true"></i></a>
-            <a href="https://www.tiktok.com/@inkfirelimited" target="_blank" rel="noopener" aria-label="TikTok"><i class="fa-brands fa-tiktok" aria-hidden="true"></i></a>
-          </div>
-        </div>
-
-        <div class="if-left-block if-legal" aria-label="<?php esc_attr_e('Company information', 'inkfire-login-styler'); ?>">
-          <p class="if-legal-small"><?php esc_html_e('Company Number: 15153305', 'inkfire-login-styler'); ?><br><?php esc_html_e('VAT Number: GB483189752', 'inkfire-login-styler'); ?></p>
-        </div>
-
-        <?php if ($lang_selector) : ?>
-          <div class="if-left-block if-lang-left" aria-label="<?php esc_attr_e('Language selector', 'inkfire-login-styler'); ?>">
-            <?php echo $lang_selector; // Output is pre-processed and considered safe. ?>
-          </div>
-        <?php endif; ?>
-      </aside>
-
-    </div>
-  </div>
-<?php
-}
-
-/**
- * Enqueues styles and outputs inline CSS for the login page.
- *
- * @since 1.0.0
- */
-function ifls_enqueue_login_styles() {
-    wp_dequeue_style('login');
-    wp_enqueue_style('if-fa', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css', [], '6.5.2');
     ?>
-  <style>
-    .login h1, .login #backtoblog, .login #nav { display:none !important; }
-    .login .screen-reader-text { position:absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:-1px !important; overflow:hidden !important; clip:rect(0 0 0 0) !important; white-space:nowrap !important; border:0 !important; }
-    *,*::before,*::after{box-sizing:border-box}
-    html,body.login{height:100%}
-    body.login{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;line-height:1.45;color:<?php echo IF_TEXT; ?>;background:#fff}
-
-    .if-full-bg{width:100vw;min-height:100vh;margin-left:calc(50% - 50vw);
-      background-image:url('<?php echo esc_url(INKFIRE_LOGIN_BG); ?>');
-      background-size:cover;background-position:center;background-attachment:scroll;
-      display:grid;place-items:center;padding:16px}
-
-    .if-shell{width:100%;max-width:1200px;border-radius:35px;overflow:hidden;background:#fff;box-shadow:0 10px 15px -3px rgba(0,0,0,.1),0 4px 6px -4px rgba(0,0,0,.1);
-      display:grid;grid-template-columns:1fr 1.8fr;grid-template-areas:'left right'}
-    .if-left{grid-area:left}
-    .if-right{grid-area:right}
-    @media (max-width:960px){ .if-shell{grid-template-columns:1fr;grid-template-areas:'right' 'left'} }
-
-    .if-right{background:#fff;display:grid;grid-template-rows:auto 1fr}
-    .if-left{background:<?php echo IF_TEAL; ?>;color:#fff;padding:48px 28px;display:grid;align-content:center;justify-items:center;gap:25px}
-
-    .if-left-block{max-width:360px;text-align:center}
-    .if-icon{width:64px;height:64px;display:block;margin:0 auto 12px}
-    .if-left h3{color:<?php echo IF_PILL; ?>;margin:0 0 10px;font-size:clamp(20px,2.2vw,28px);font-weight:800}
-    .if-left h4{color:<?php echo IF_PILL; ?>;margin:0 0 8px;font-size:clamp(16px,1.7vw,18px);font-weight:800}
-    .if-accent{color:#ffffff;text-decoration:none;font-weight:700}
-    .if-socials{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
-    .if-socials a{color:#fff;display:inline-flex;text-decoration:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:999px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)}
-
-    .if-legal{font-size:14px;line-height:1.45;color:#eaf5f4}
-    .if-legal-small{opacity:.95;margin:2px 0 0}
-
-    .if-lang-left #if-language-switcher{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto}
-    .if-lang-left #if-language-switcher label{display:none}
-    .if-lang-left #if-language-switcher select{border-radius:10px;border:1px solid rgba(255,255,255,.35);background:#0f4c50;color:#fff;padding:6px 8px}
-    .if-lang-left #if-language-switcher input[type="submit"]{border-radius:8px;border:1px solid rgba(255,255,255,.35);background:#0f4c50;color:#fff;padding:6px 10px}
-
-    .if-logo-wrap{display:grid;place-items:center;padding:40px 18px}
-    .if-logo{width:clamp(180px,38vw,360px);height:auto}
-
-    .if-teal{background:<?php echo IF_TEAL2; ?>;padding:38px 38px 30px;display:grid;gap:20px;align-content:start;justify-items:stretch}
-    .if-cta-row{display:flex;gap:28px;align-items:stretch;justify-content:center;flex-direction:column}
-    @media (min-width:961px){ .if-cta-row{flex-direction:row} }
-    .if-cta-cell{flex:1 1 0;min-width:0;display:flex}
-
-    .if-card{position:relative;background:#fff;border-radius:25px;padding:35px;box-shadow:0 14px 24px -10px rgba(0,0,0,.15);width:100%;display:flex;flex-direction:column;align-items:stretch;text-align:left}
-
-    .if-card-title{display:inline-block;margin:0 0 25px;font-weight:800;font-size:20px;line-height:1;color:#1b1b1b;background:<?php echo IF_PILL; ?>;padding:8px 14px;border-radius:999px;box-shadow:0 6px 12px -8px rgba(0,0,0,.25)}
-
-    #if_card_loginform p, #if_lostpasswordform p, #if_resetpassform p, #if_registerform p{margin:0 0 12px}
-    #if_card_loginform label, #if_lostpasswordform label, #if_resetpassform label, #if_registerform label{display:block;font-weight:600;color:#223;margin:0 0 6px}
-    #if_card_loginform .input, #if_lostpasswordform .input, #if_resetpassform .input, #if_registerform .input,
-    #if_card_loginform input[type="text"], #if_card_loginform input[type="password"],
-    #if_lostpasswordform input[type="text"], #if_lostpasswordform input[type="email"],
-    #if_resetpassform input[type="password"],
-    #if_registerform input[type="text"], #if_registerform input[type="email"]{
-      width:100%;border-radius:999px;border:1px solid #d7dee0;background:#fff;padding:14px 16px;font-size:16px;color:#111}
-    #if_card_loginform .input:focus, #if_lostpasswordform .input:focus, #if_resetpassform .input:focus, #if_registerform .input:focus{border-color:#179AD6;box-shadow:0 0 0 3px rgba(23,154,214,.25);outline:0}
-    #if_card_loginform .forgetmenot{display:flex;align-items:center;gap:8px;margin-top:4px}
-    #if_card_loginform .forgetmenot label{margin:0;font-weight:500;color:#334}
-
-    .wp-core-ui #if_card_loginform .button-primary,
-    .wp-core-ui #if_lostpasswordform .button-primary,
-    .wp-core-ui #if_resetpassform .button-primary,
-    .wp-core-ui #if_registerform .button-primary{
-      cursor:pointer;background:<?php echo IF_PILL; ?>;color:#1b1b1b;border:none;border-radius:999px;padding:12px 22px;font-weight:700;font-size:16px;box-shadow:0 12px 18px -10px rgba(0,0,0,.2);text-shadow:none;transition:background .18s ease,color .18s ease,transform .06s ease}
-    .wp-core-ui #if_card_loginform .button-primary:hover, .wp-core-ui #if_lostpasswordform .button-primary:hover,
-    .wp-core-ui #if_resetpassform .button-primary:hover, .wp-core-ui #if_registerform .button-primary:hover,
-    .wp-core-ui #if_card_loginform .button-primary:active, .wp-core-ui #if_lostpasswordform .button-primary:active,
-    .wp-core-ui #if_resetpassform .button-primary:active, .wp-core-ui #if_registerform .button-primary:active{background:<?php echo IF_TEAL2; ?>;color:#fff;transform:translateY(-1px)}
-    .wp-core-ui #if_card_loginform .button-primary:focus-visible, .wp-core-ui #if_lostpasswordform .button-primary:focus-visible,
-    .wp-core-ui #if_resetpassform .button-primary:focus-visible, .wp-core-ui #if_registerform .button-primary:focus-visible{outline:3px solid <?php echo IF_ORANGE; ?>;outline-offset:2px}
-
-    .if-aux{position:relative;display:flex;align-items:center;justify-content:center;color:#fff}
-    .if-aux-links{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px}
-    .if-aux-link{display:inline-flex;align-items:center;justify-content:center;padding:7px 17px;border-radius:14px;background:rgba(255,255,255,.12);color:#fff;text-decoration:none;transition:background .18s ease,color .18s ease,transform .06s ease}
-    .if-aux-link:hover,.if-aux-link:active{background:<?php echo IF_ORANGE; ?>;color:#fff;transform:translateY(-1px)}
-    .if-aux-link:focus-visible{outline:3px solid #F4C946;outline-offset:2px}
-    .if-aux-links .sep{display:none}
-
-    @media (max-width:960px){
-      .if-left{padding:36px 20px} .if-teal{padding:30px 24px 24px}
-      .if-card{padding:28px} .if-card-title{margin-bottom:12px;padding:7px 12px}
-    }
-    @media (max-width:520px){
-      .if-logo-wrap{padding:28px 14px} .if-card{padding:20px}
-      .if-aux-links{gap:10px} .if-aux-link{width:100%; max-width:420px}
-    }
-
-    .inkfire-inline-form #language-switcher{display:none !important}
-    .inkfire-inline-form #login{display:none !important}
-    @media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
-  </style>
+    <div class="if-full-bg">
+        <div class="if-shell" role="region" aria-label="Login">
+            <main class="if-right" role="main">
+                <div class="if-logo-wrap"><img class="if-logo" src="<?php echo esc_url(INKFIRE_LOGIN_LOGO); ?>" alt="Logo" /></div>
+                <section class="if-teal">
+                    <div class="if-cta-row"><div class="if-cta-cell"><div class="if-card" id="if-login-card"><?php echo ifls_render_inline_form($action); ?></div></div></div>
+                    <nav class="if-aux">
+                        <div class="if-aux-links">
+                            <?php if ($action !== 'register' && get_option('users_can_register')) : ?>
+                                <a class="if-aux-link" href="<?php echo esc_url(wp_registration_url()); ?>">Create account</a><span class="sep">•</span>
+                            <?php elseif ($action === 'register') : ?>
+                                <a class="if-aux-link" href="<?php echo esc_url(wp_login_url()); ?>">Back to Login</a><span class="sep">•</span>
+                            <?php endif; ?>
+                            <a class="if-aux-link" href="<?php echo esc_url($lost_url); ?>">Lost password?</a><span class="sep">•</span>
+                            <a class="if-aux-link" href="<?php echo esc_url($home_url); ?>">Back to <?php echo esc_html($site_name); ?></a>
+                            <?php if ($policy_url) : ?><span class="sep">•</span><a class="if-aux-link" href="<?php echo esc_url($policy_url); ?>">Privacy Policy</a><?php endif; ?>
+                        </div>
+                    </nav>
+                </section>
+            </main>
+            <aside class="if-left" role="complementary">
+                <div class="if-left-block"><img class="if-icon" src="<?php echo esc_url(INKFIRE_LOGIN_ICON); ?>" alt="" /><h3>Stay in touch</h3><p><a class="if-accent" href="mailto:hello@inkfire.co.uk">hello@inkfire.co.uk</a><br><a class="if-accent" href="tel:+443336134653">+44 (0)333 613 4653</a><br><a class="if-accent" href="https://inkfire.co.uk/" target="_blank">inkfire.co.uk</a></p></div>
+                <div class="if-left-block"><h4>Opening Times</h4><p>Monday – Friday<br><strong>9am – 5pm GMT</strong></p></div>
+                <div class="if-left-block"><h4>Follow Us</h4><div class="if-socials"><a href="https://facebook.com/inkfirelimited" target="_blank"><i class="fa-brands fa-facebook-f"></i></a><a href="https://www.instagram.com/inkfirelimited/" target="_blank"><i class="fa-brands fa-instagram"></i></a><a href="https://uk.linkedin.com/company/inkfire" target="_blank"><i class="fa-brands fa-linkedin-in"></i></a><a href="https://twitter.com/Inkfirelimited" target="_blank"><i class="fa-brands fa-x-twitter"></i></a><a href="https://www.tiktok.com/@inkfirelimited" target="_blank"><i class="fa-brands fa-tiktok"></i></a></div></div>
+                <div class="if-left-block if-legal"><p class="if-legal-small">Company Number: 15153305<br>VAT Number: GB483189752</p></div>
+                <?php if ($lang_selector) : ?><div class="if-left-block if-lang-left"><?php echo $lang_selector; ?></div><?php endif; ?>
+            </aside>
+        </div>
+    </div>
     <?php
 }
 
+function ifls_plugin_row_meta($links, $file) {
+    if (plugin_basename(__FILE__) === $file) $links[] = '<strong>Enterprise Gold v2.0.9</strong>';
+    return $links;
+}
+
 /**
- * Enqueues styles for the admin area, specifically for the session timeout modal.
- *
- * @since 1.6.0
+ * Add Plugin Icon to Plugins Page
+ * Injects a small CSS snippet to display your icon next to the plugin name.
  */
-function ifls_enqueue_admin_styles() {
-    // These styles target the 'wp-auth-check' modal that appears on session timeout.
-    // We use !important to ensure they override default admin styles in this specific context.
+function ifls_add_plugin_icon() {
+    $icon_url = INKFIRE_LOGIN_ICON;
+    // Target the specific row for this plugin based on its directory name
+    // Assumes folder name is 'foundation-inkfire-login-styler'
     ?>
     <style>
-        #wp-auth-check-form .input,
-        #wp-auth-check-form input[type="text"],
-        #wp-auth-check-form input[type="password"] {
-            width: 100%;
-            border-radius: 999px !important;
-            border: 1px solid #d7dee0 !important;
-            background: #fff !important;
-            padding: 14px 16px !important;
-            font-size: 16px !important;
-            color: #111 !important;
-            margin-bottom: 12px;
+        /* Target the plugin row by its data-slug attribute */
+        tr[data-slug="foundation-inkfire-login-styler"] .plugin-title strong {
+            position: relative;
+            padding-left: 36px;
+            display: inline-block;
         }
-        #wp-auth-check-form .input:focus {
-            border-color: #179AD6 !important;
-            box-shadow: 0 0 0 3px rgba(23,154,214,.25) !important;
-            outline: 0 !important;
-        }
-        #wp-auth-check-form .button-primary {
-            cursor: pointer !important;
-            background: <?php echo IF_PILL; ?> !important;
-            color: #1b1b1b !important;
-            border: none !important;
-            border-radius: 999px !important;
-            padding: 10px 20px !important;
-            font-weight: 700 !important;
-            font-size: 15px !important;
-            box-shadow: 0 12px 18px -10px rgba(0,0,0,.2) !important;
-            text-shadow: none !important;
-            height: auto !important;
-            line-height: normal !important;
-            float: none !important;
-            width: 100%;
-            transition: background .18s ease, color .18s ease, transform .06s ease !important;
-        }
-        #wp-auth-check-form .button-primary:hover,
-        #wp-auth-check-form .button-primary:active {
-            background: <?php echo IF_TEAL2; ?> !important;
-            color: #fff !important;
-            transform: translateY(-1px) !important;
-        }
-        #wp-auth-check-form .button-primary:focus-visible {
-            outline: 3px solid <?php echo IF_ORANGE; ?> !important;
-            outline-offset: 2px !important;
-        }
-        #wp-auth-check-form .forgetmenot {
-            margin-top: 5px !important;
-            margin-bottom: 15px !important;
-        }
-        #wp-auth-check-form #login_error {
-            margin-bottom: 15px !important;
+        tr[data-slug="foundation-inkfire-login-styler"] .plugin-title strong::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 28px;
+            height: 28px;
+            background-image: url('<?php echo esc_url($icon_url); ?>');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
         }
     </style>
     <?php
 }
+add_action('admin_head', 'ifls_add_plugin_icon');
 
-/**
- * Adds a descriptive text to the plugin's entry in the plugin list table.
- *
- * @since 1.4.0
- * @param array  $links An array of the plugin's metadata.
- * @param string $file  The plugin file path.
- * @return array The modified array of plugin metadata.
- */
-function ifls_plugin_row_meta($links, $file) {
-    if (plugin_basename(__FILE__) === $file) {
-        $description = __('Custom, accessible login page with Inkfire branding. Supports login, password reset, and optional registration with a responsive two‑column layout.', 'inkfire-login-styler');
-        $links[] = esc_html($description);
-    }
-    return $links;
-}
+add_action('admin_enqueue_scripts', function() {
+    $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
+    $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.9';
+    wp_enqueue_style('inkfire-login', plugins_url('assets/inkfire-login.css', __FILE__), [], $css_ver);
+    wp_add_inline_style('inkfire-login', IFLS_Asset_Manager::generate_css_variables());
+});
 
-
-/* ==========================================================================
-   Hook into WordPress
-   ========================================================================== */
+register_activation_hook(__FILE__, function() { add_option('ifls_installed_version', '2.0.9'); });
 
 add_filter('login_headerurl', 'ifls_login_header_url');
 add_filter('login_headertext', 'ifls_login_header_text');
 add_filter('login_body_class', 'ifls_login_body_class');
 add_action('login_header', 'ifls_render_login_layout');
-add_action('login_enqueue_scripts', 'ifls_enqueue_login_styles');
+add_action('login_enqueue_scripts', ['IFLS_Asset_Manager', 'enqueue_assets']);
 add_action('login_footer', '__return_null');
 add_filter('login_redirect', 'ifls_secure_login_redirect', 10, 3);
 add_filter('plugin_row_meta', 'ifls_plugin_row_meta', 10, 2);
-add_action('admin_enqueue_scripts', 'ifls_enqueue_admin_styles');

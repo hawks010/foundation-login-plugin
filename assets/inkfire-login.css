@@ -1,0 +1,514 @@
+/**
+ * Inkfire Login Styler - Enterprise Gold v2.0.10
+ * EXACT Original Branding + Accessibility & Security Fixes
+ */
+
+:root {
+    /* ORIGINAL BRAND COLORS (Strictly enforced) */
+    --if-teal: #32797e;
+    --if-teal-dark: #1e6167;
+    --if-pill: #fbccbf;
+    --if-text: #111111;
+    --if-orange: #e27200;
+    
+    /* ASSETS (Relative to this CSS file) */
+    --if-bg-image: url('inkfire_background.png');
+    --if-bg-overlay: rgba(0, 0, 0, 0.2);
+    
+    /* Layout */
+    --if-transition: 0.3s ease;
+    --if-radius: 12px;
+    --if-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+/* ==========================================================================
+   Global & Reset
+   ========================================================================== */
+.login h1, .login #backtoblog, .login #nav { display:none !important; }
+.login .screen-reader-text { position:absolute !important; width:1px !important; height:1px !important; padding:0 !important; margin:-1px !important; overflow:hidden !important; clip:rect(0 0 0 0) !important; white-space:nowrap !important; border:0 !important; }
+*,*::before,*::after{box-sizing:border-box}
+
+html, body.login { height: 100%; }
+body.login {
+    margin: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+    color: var(--if-text);
+    background: #fff;
+}
+
+/* ==========================================================================
+   Structure (Grid System)
+   ========================================================================== */
+.if-full-bg {
+    width: 100vw;
+    min-height: 100vh;
+    margin-left: calc(50% - 50vw);
+    
+    /* Strict fallback logic */
+    background-image: url('inkfire_background.png'); 
+    background-image: var(--if-bg-image);
+    
+    background-size: cover;
+    background-position: center;
+    background-attachment: scroll;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+    position: relative;
+}
+
+/* Overlay */
+.if-full-bg::before {
+    content: "";
+    position: absolute;
+    top:0; left:0; right:0; bottom:0;
+    background: var(--if-bg-overlay);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    transition: opacity 0.3s ease;
+}
+
+.if-shell {
+    width: 100%;
+    max-width: 1200px;
+    border-radius: 35px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+    display: grid;
+    grid-template-columns: 1fr 1.8fr;
+    grid-template-areas: 'left right';
+    z-index: 1;
+    position: relative;
+}
+
+.if-left { grid-area: left; }
+.if-right { grid-area: right; }
+
+@media (max-width:960px) {
+    .if-shell {
+        grid-template-columns: 1fr;
+        grid-template-areas: 'right' 'left';
+    }
+}
+
+/* ==========================================================================
+   Right Column (Login Form Area)
+   ========================================================================== */
+.if-right {
+    background: #fff;
+    display: grid;
+    grid-template-rows: auto 1fr;
+}
+
+.if-logo-wrap {
+    display: grid;
+    place-items: center;
+    padding: 40px 18px;
+}
+.if-logo {
+    width: clamp(180px, 38vw, 360px);
+    height: auto;
+}
+
+.if-teal {
+    background: var(--if-teal-dark);
+    padding: 38px 38px 30px;
+    display: grid;
+    gap: 20px;
+    align-content: start;
+    justify-items: stretch;
+}
+
+.if-cta-row {
+    display: flex;
+    gap: 28px;
+    align-items: stretch;
+    justify-content: center;
+    flex-direction: column;
+}
+@media (min-width:961px) { .if-cta-row { flex-direction: row; } }
+.if-cta-cell { flex: 1 1 0; min-width: 0; display: flex; }
+
+.if-card {
+    position: relative;
+    background: #fff;
+    border-radius: 25px;
+    padding: 35px;
+    box-shadow: 0 14px 24px -10px rgba(0,0,0,.15);
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
+}
+
+/* THE PINK PILL TITLE */
+.if-card-title {
+    display: inline-block;
+    margin: 0 0 25px;
+    font-weight: 800;
+    font-size: 20px;
+    line-height: 1;
+    color: #1b1b1b;
+    background: var(--if-pill); /* #fbccbf */
+    padding: 8px 14px;
+    border-radius: 999px;
+    box-shadow: 0 6px 12px -8px rgba(0,0,0,.25);
+}
+
+/* Messages (Improved contrast for errors) */
+.message, .success, .error {
+    background-color: #fff;
+    border-left: 4px solid #7ad03a;
+    box-shadow: 0 1px 1px 0 rgba(0,0,0,.1);
+    padding: 12px;
+    margin-bottom: 20px;
+    color: #333 !important; /* Force dark text */
+}
+.message.info { border-color: #00a0d2; }
+.error { border-color: #b32d2e !important; } /* Darker red for accessibility */
+
+/* Form Elements */
+#if_card_loginform p, #if_lostpasswordform p, #if_resetpassform p, #if_registerform p, #if_confirm_email_form p {
+    margin: 0 0 12px;
+}
+#if_card_loginform label, #if_lostpasswordform label, #if_resetpassform label, #if_registerform label, #if_confirm_email_form label {
+    display: block;
+    font-weight: 600;
+    color: #223;
+    margin: 0 0 6px;
+}
+
+#if_card_loginform .input, #if_lostpasswordform .input, #if_resetpassform .input, #if_registerform .input, #if_confirm_email_form .input,
+#if_card_loginform input[type="text"], #if_card_loginform input[type="password"],
+#if_lostpasswordform input[type="text"], #if_lostpasswordform input[type="email"],
+#if_resetpassform input[type="password"],
+#if_registerform input[type="text"], #if_registerform input[type="email"] {
+    width: 100%;
+    border-radius: 999px;
+    border: 1px solid #d7dee0;
+    background: #fff;
+    padding: 14px 16px;
+    font-size: 16px;
+    color: #111;
+}
+
+/* Input Focus */
+.if-input-focused label {
+    color: var(--if-teal);
+    transform: translateY(-2px);
+    transition: all var(--if-transition);
+}
+
+#if_card_loginform .input:focus, #if_lostpasswordform .input:focus, #if_resetpassform .input:focus, #if_registerform .input:focus, #if_confirm_email_form .input:focus {
+    border-color: #179AD6;
+    box-shadow: 0 0 0 3px rgba(23,154,214,.25);
+    outline: 0;
+}
+
+#if_card_loginform .forgetmenot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+#if_card_loginform .forgetmenot label {
+    margin: 0;
+    font-weight: 500;
+    color: #334;
+}
+
+/* Password Strength Meter */
+.if-password-strength-meter { margin: 0.5rem 0 1rem; }
+.strength-bar { height: 4px; width: 0%; border-radius: 2px; transition: width 0.3s ease, background-color 0.3s ease; }
+.strength-text { font-size: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem); margin-top: 0.25rem; color: var(--if-text); opacity: 0.8; }
+
+.strength-bar[style*="0%"] { background-color: #e00 !important; }
+.strength-bar[style*="20%"] { background-color: #e70 !important; }
+.strength-bar[style*="40%"] { background-color: #ea0 !important; }
+.strength-bar[style*="60%"] { background-color: #8c0 !important; }
+.strength-bar[style*="80%"] { background-color: #0a0 !important; }
+.strength-bar[style*="100%"] { background-color: #0a0 !important; }
+
+/* Buttons */
+.wp-core-ui #if_card_loginform .button-primary,
+.wp-core-ui #if_lostpasswordform .button-primary,
+.wp-core-ui #if_resetpassform .button-primary,
+.wp-core-ui #if_registerform .button-primary,
+.wp-core-ui #if_confirm_email_form .button-primary {
+    cursor: pointer;
+    background: var(--if-pill); /* #fbccbf */
+    color: #1b1b1b;
+    border: none;
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-weight: 700;
+    font-size: 16px;
+    box-shadow: 0 12px 18px -10px rgba(0,0,0,.2);
+    text-shadow: none;
+    transition: background .18s ease, color .18s ease, transform .06s ease;
+}
+/* Enhanced hover contrast for buttons */
+.wp-core-ui #if_card_loginform .button-primary:hover, .wp-core-ui #if_lostpasswordform .button-primary:hover,
+.wp-core-ui #if_resetpassform .button-primary:hover, .wp-core-ui #if_registerform .button-primary:hover,
+.wp-core-ui #if_confirm_email_form .button-primary:hover,
+.wp-core-ui #if_card_loginform .button-primary:active, .wp-core-ui #if_lostpasswordform .button-primary:active,
+.wp-core-ui #if_resetpassform .button-primary:active, .wp-core-ui #if_registerform .button-primary:active,
+.wp-core-ui #if_confirm_email_form .button-primary:active {
+    background: #0a4a50 !important; /* Darker teal for better contrast */
+    color: #fff !important;
+    transform: translateY(-1px);
+}
+.wp-core-ui #if_card_loginform .button-primary:focus-visible, .wp-core-ui #if_lostpasswordform .button-primary:focus-visible,
+.wp-core-ui #if_resetpassform .button-primary:focus-visible, .wp-core-ui #if_registerform .button-primary:focus-visible,
+.wp-core-ui #if_confirm_email_form .button-primary:focus-visible {
+    outline: 3px solid var(--if-orange);
+    outline-offset: 2px;
+}
+
+/* Loading Spinner */
+.button-primary:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    position: relative;
+}
+.button-primary:disabled::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 1em; height: 1em;
+    margin: -0.5em 0 0 -0.5em;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: ifls-spin 1s linear infinite;
+}
+@keyframes ifls-spin { to { transform: rotate(360deg); } }
+
+/* Aux Links */
+.if-aux {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+}
+.if-aux-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+}
+.if-aux-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 17px;
+    border-radius: 14px;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    text-decoration: none;
+    transition: background .18s ease, color .18s ease, transform .06s ease;
+}
+.if-aux-link:hover, .if-aux-link:active {
+    background: var(--if-orange);
+    color: #fff;
+    transform: translateY(-1px);
+}
+.if-aux-link:focus-visible {
+    outline: 3px solid #F4C946;
+    outline-offset: 2px;
+}
+.if-aux-links .sep { display: none; }
+
+/* ==========================================================================
+   Left Column (Contact/Brand Area)
+   ========================================================================== */
+.if-left {
+    background: var(--if-teal);
+    color: #fff;
+    padding: 48px 28px;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 25px;
+}
+
+.if-left-block {
+    max-width: 360px;
+    text-align: center;
+}
+.if-icon {
+    width: 64px;
+    height: 64px;
+    display: block;
+    margin: 0 auto 12px;
+}
+.if-left h3 {
+    color: var(--if-pill);
+    margin: 0 0 10px;
+    font-size: clamp(20px, 2.2vw, 28px);
+    font-weight: 800;
+}
+.if-left h4 {
+    color: var(--if-pill);
+    margin: 0 0 8px;
+    font-size: clamp(16px, 1.7vw, 18px);
+    font-weight: 800;
+}
+.if-accent {
+    color: #ffffff;
+    text-decoration: none;
+    font-weight: 700;
+}
+.if-socials {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+}
+.if-socials a {
+    color: #fff;
+    display: inline-flex;
+    text-decoration: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    background: rgba(255,255,255,.14);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+}
+/* Enhanced focus states for social icons */
+.if-socials a:focus-visible {
+    outline: 3px solid #F4C946;
+    outline-offset: 3px;
+    outline-style: solid;
+}
+
+.if-legal {
+    font-size: 14px;
+    line-height: 1.45;
+    color: #eaf5f4;
+}
+.if-legal-small {
+    opacity: .95;
+    margin: 2px 0 0;
+}
+
+.if-lang-left #if-language-switcher {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 auto;
+}
+.if-lang-left #if-language-switcher label { display: none; }
+.if-lang-left #if-language-switcher select {
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.35);
+    background: #0f4c50;
+    color: #fff;
+    padding: 6px 8px;
+}
+.if-lang-left #if-language-switcher input[type="submit"] {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,.35);
+    background: #0f4c50;
+    color: #fff;
+    padding: 6px 10px;
+}
+
+@media (max-width:960px) {
+    .if-left { padding: 36px 20px; }
+    .if-teal { padding: 30px 24px 24px; }
+    .if-card { padding: 28px; }
+    .if-card-title { margin-bottom: 12px; padding: 7px 12px; }
+}
+@media (max-width:520px) {
+    .if-logo-wrap { padding: 28px 14px; }
+    .if-card { padding: 20px; }
+    .if-aux-links { gap: 10px; }
+    .if-aux-link { width: 100%; max-width: 420px; }
+}
+
+/* Fix Issue 5: Ultra-Mobile Support */
+@media (max-width: 360px) {
+    .if-aux-link { padding: 6px 12px !important; font-size: 0.9em !important; }
+    .if-card { padding: 16px !important; }
+    .if-card-title { font-size: 16px !important; padding: 6px 10px !important; }
+}
+
+.inkfire-inline-form #language-switcher { display: none !important; }
+.inkfire-inline-form #login { display: none !important; }
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    .button-primary:disabled::after {
+        animation: none !important;
+    }
+}
+
+/* ==========================================================================
+   Admin Session Timeout Modal
+   ========================================================================== */
+#wp-auth-check-form .input,
+#wp-auth-check-form input[type="text"],
+#wp-auth-check-form input[type="password"] {
+    width: 100%;
+    border-radius: 999px !important;
+    border: 1px solid #d7dee0 !important;
+    background: #fff !important;
+    padding: 14px 16px !important;
+    font-size: 16px !important;
+    color: #111 !important;
+    margin-bottom: 12px;
+}
+#wp-auth-check-form .input:focus {
+    border-color: #179AD6 !important;
+    box-shadow: 0 0 0 3px rgba(23,154,214,.25) !important;
+    outline: 0 !important;
+}
+#wp-auth-check-form .button-primary {
+    cursor: pointer !important;
+    background: var(--if-pill) !important;
+    color: #1b1b1b !important;
+    border: none !important;
+    border-radius: 999px !important;
+    padding: 10px 20px !important;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+    box-shadow: 0 12px 18px -10px rgba(0,0,0,.2) !important;
+    text-shadow: none !important;
+    height: auto !important;
+    line-height: normal !important;
+    float: none !important;
+    width: 100%;
+    transition: background .18s ease, color .18s ease, transform .06s ease !important;
+}
+#wp-auth-check-form .button-primary:hover,
+#wp-auth-check-form .button-primary:active {
+    background: var(--if-teal-dark) !important;
+    color: #fff !important;
+    transform: translateY(-1px) !important;
+}
+#wp-auth-check-form .button-primary:focus-visible {
+    outline: 3px solid var(--if-orange) !important;
+    outline-offset: 2px !important;
+}
+#wp-auth-check-form .forgetmenot {
+    margin-top: 5px !important;
+    margin-bottom: 15px !important;
+}
+#wp-auth-check-form #login_error {
+    margin-bottom: 15px !important;
+}
