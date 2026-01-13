@@ -43,10 +43,10 @@ if (!function_exists('ifls_boot_updater')) {
             // You MUST attach a zip named 'foundation-inkfire-login-styler.zip' to your GitHub Release.
             $myUpdateChecker->getVcsApi()->enableReleaseAssets();
 
-            // Removed setBranch('main') to allow Tag/Release updates to work properly.
-
             // 7. Add update check interval (reduce load on GitHub)
-            $myUpdateChecker->setCheckPeriod(12); // Check every 12 hours instead of default 12
+            // NOTE: The setCheckPeriod() method caused a fatal error. 
+            // Since 12 hours is the default, we can safely remove this line.
+            // $myUpdateChecker->setCheckPeriod(12); 
 
             // 8. Add download link filter for better UX
             $myUpdateChecker->addFilter('puc_request_info_result-'.$slug, function($pluginInfo) {
@@ -66,9 +66,9 @@ if (!function_exists('ifls_boot_updater')) {
                     // Construct source zip URL: https://github.com/user/repo/archive/refs/tags/vX.X.X.zip
                     // This fallback might require manual intervention if the zip structure is nested differently
                     // but it's better than no update at all.
-                     if (defined('WP_DEBUG') && WP_DEBUG) {
+                      if (defined('WP_DEBUG') && WP_DEBUG) {
                         error_log('IFLS Updater: Fallback to source zip triggered for ' . $slug);
-                     }
+                      }
                 }
                 return $packageUrl;
             }, 10, 2);
