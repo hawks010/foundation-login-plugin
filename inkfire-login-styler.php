@@ -3,7 +3,7 @@
  * Plugin Name:       Foundation Inkfire Login - Enterprise Gold
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
- * Version:           2.0.10
+ * Version:           2.0.11
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
@@ -148,8 +148,8 @@ class IFLS_Asset_Manager {
         $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
         $js_path  = plugin_dir_path(__FILE__) . 'assets/inkfire-login.js';
         
-        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.10';
-        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.10';
+        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.11';
+        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.11';
         
         wp_enqueue_style('inkfire-login', self::get_asset_url('css'), [], $css_ver);
         wp_enqueue_script('inkfire-login-js', self::get_asset_url('js'), [], $js_ver, true);
