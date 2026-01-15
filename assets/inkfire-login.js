@@ -45,6 +45,12 @@
             
             // Form submission enhancements
             document.querySelectorAll('form').forEach(form => {
+                // FIX (DeepSeek): EXCLUDE confirm admin email form from all JS interference
+                if (form.id === 'if_confirm_email_form' || 
+                    form.querySelector('input[name="confirm_admin_email"]')) {
+                    return; // Skip all JS handling for this form
+                }
+
                 form.addEventListener('submit', (e) => {
                     const submitBtn = form.querySelector('input[type="submit"], button[type="submit"]');
                     if (submitBtn) {
