@@ -3,7 +3,7 @@
  * Plugin Name:       Foundation Inkfire Login - Enterprise Gold
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
- * Version:           2.0.11
+ * Version:           2.0.18
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
@@ -41,6 +41,46 @@ if (!defined('IFLS_LOCKOUT_TIME')) define('IFLS_LOCKOUT_TIME', 900);
 $updater_file = __DIR__ . '/inc/ifls-updater.php';
 if (file_exists($updater_file)) {
     require_once $updater_file;
+}
+
+/* ==========================================================================
+   CONFIRM ADMIN EMAIL FIXES
+   ========================================================================== */
+
+/**
+ * Hook into the confirm_admin_email action early to handle it before Elementor crashes
+ */
+add_action('login_init', 'ifls_handle_confirm_admin_email', 1);
+function ifls_handle_confirm_admin_email() {
+    // Only process if this is the confirm_admin_email action
+    if (!isset($_REQUEST['action']) || $_REQUEST['action'] !== 'confirm_admin_email') {
+        return;
+    }
+    
+    // Check if form was submitted
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_admin_email'])) {
+        // Verify the WordPress nonce
+        if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'confirm_admin_email')) {
+            wp_die('Security check failed.');
+        }
+        
+        // Clear the admin email confirmation flag
+        delete_option('admin_email_lifespan');
+        
+        // Get redirect URL
+        $redirect_to = admin_url();
+        if (!empty($_POST['redirect_to'])) {
+            $redirect_to = $_POST['redirect_to'];
+            // Ensure it's not pointing back to confirm_admin_email
+            if (strpos($redirect_to, 'confirm_admin_email') !== false) {
+                $redirect_to = admin_url();
+            }
+        }
+        
+        // Force immediate redirect to prevent Elementor from crashing
+        wp_safe_redirect($redirect_to);
+        exit;
+    }
 }
 
 /* ==========================================================================
@@ -148,19 +188,24 @@ class IFLS_Asset_Manager {
         $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
         $js_path  = plugin_dir_path(__FILE__) . 'assets/inkfire-login.js';
         
-        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.11';
-        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.11';
+        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.18';
+        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.18';
         
         wp_enqueue_style('inkfire-login', self::get_asset_url('css'), [], $css_ver);
-        wp_enqueue_script('inkfire-login-js', self::get_asset_url('js'), [], $js_ver, true);
         
-        wp_localize_script('inkfire-login-js', 'ifls_vars', [
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('ifls_js_nonce'),
-            'is_rtl' => is_rtl(),
-            'color_scheme' => 'light',
-            'plugin_url' => plugin_dir_url(__FILE__)
-        ]);
+        // CRITICAL FIX: Don't load ANY JavaScript on confirm_admin_email page
+        $action = isset($_REQUEST['action']) ? sanitize_key($_REQUEST['action']) : '';
+        if ($action !== 'confirm_admin_email') {
+            wp_enqueue_script('inkfire-login-js', self::get_asset_url('js'), [], $js_ver, true);
+            
+            wp_localize_script('inkfire-login-js', 'ifls_vars', [
+                'ajax_url' => admin_url('admin-ajax.php'),
+                'nonce' => wp_create_nonce('ifls_js_nonce'),
+                'is_rtl' => is_rtl(),
+                'color_scheme' => 'light',
+                'plugin_url' => plugin_dir_url(__FILE__)
+            ]);
+        }
         
         wp_add_inline_style('inkfire-login', self::generate_css_variables());
     }
@@ -310,19 +355,27 @@ function ifls_render_inline_form($action) {
         <?php return ob_get_clean();
     }
     
-    // CONFIRM ADMIN EMAIL
+    // CONFIRM ADMIN EMAIL - SIMPLIFIED VERSION
     if ($action === 'confirm_admin_email') {
         $admin_email = get_option('admin_email');
+        $redirect = ifls_sanitize_request('redirect_to');
+        // Ensure redirect doesn't point back to this page
+        if (empty($redirect) || strpos($redirect, 'confirm_admin_email') !== false) {
+            $redirect = admin_url();
+        }
+        
         ob_start(); ?>
         <h2 class="if-card-title"><?php echo esc_html(__('Verify Admin Email', 'inkfire-login-styler')); ?></h2>
         <form name="confirm-admin-email-form" id="if_confirm_email_form" action="<?php echo esc_url(site_url('wp-login.php?action=confirm_admin_email', 'login_post')); ?>" method="post">
+            <?php wp_nonce_field('confirm_admin_email'); ?>
             <?php wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); ?>
             <p style="margin-bottom:8px"><?php printf(__('Current admin email: %s', 'inkfire-login-styler'), '<strong>' . esc_html($admin_email) . '</strong>'); ?></p>
             <p style="margin-bottom:20px; font-size:0.95em; opacity:0.8;">Please verify this address is correct.</p>
             <p class="submit" style="display:flex; flex-direction:column; gap:12px;">
-                <input type="submit" name="confirm_admin_email" class="button button-primary" value="The email is correct">
+                <input type="submit" name="confirm_admin_email" id="if_confirm_email_btn" class="button button-primary" value="The email is correct">
                 <a href="<?php echo esc_url(admin_url('options-general.php')); ?>" style="text-align:center; font-size:0.9em; text-decoration:none; color:inherit;">Update Email</a>
             </p>
+            <input type="hidden" name="redirect_to" value="<?php echo esc_attr($redirect); ?>">
         </form>
         <?php return ob_get_clean();
     }
@@ -402,7 +455,7 @@ function ifls_render_login_layout() {
 }
 
 function ifls_plugin_row_meta($links, $file) {
-    if (plugin_basename(__FILE__) === $file) $links[] = '<strong>Enterprise Gold v2.0.9</strong>';
+    if (plugin_basename(__FILE__) === $file) $links[] = '<strong>Enterprise Gold v2.0.18</strong>';
     return $links;
 }
 
@@ -442,12 +495,12 @@ add_action('admin_head', 'ifls_add_plugin_icon');
 
 add_action('admin_enqueue_scripts', function() {
     $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
-    $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.9';
+    $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.18';
     wp_enqueue_style('inkfire-login', plugins_url('assets/inkfire-login.css', __FILE__), [], $css_ver);
     wp_add_inline_style('inkfire-login', IFLS_Asset_Manager::generate_css_variables());
 });
 
-register_activation_hook(__FILE__, function() { add_option('ifls_installed_version', '2.0.9'); });
+register_activation_hook(__FILE__, function() { add_option('ifls_installed_version', '2.0.18'); });
 
 add_filter('login_headerurl', 'ifls_login_header_url');
 add_filter('login_headertext', 'ifls_login_header_text');
