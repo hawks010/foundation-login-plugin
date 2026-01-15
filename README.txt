@@ -3,7 +3,7 @@ Contributors: Inkfire
 Tags: login, branding, security, custom login
 Requires at least: 6.0
 Tested up to: 6.6
-Stable tag: 2.0.9
+Stable tag: 2.0.18
 Requires PHP: 7.4
 License: GPLv2 or later
 
@@ -43,6 +43,16 @@ This is a "Gold Master" plugin with hardcoded branding to ensure consistency acr
 
 == Changelog ==
 
+= 2.0.18 =
+
+Fix: Critical fix for the "Confirm Admin Email" screen loop where the form would not submit or redirect correctly.
+
+Fix: Resolved a Fatal Error conflict with Elementor Cloud Library (Status 403) during the admin email verification flow.
+
+Fix: Implemented robust safe-redirect logic to ensure users are sent immediately to the dashboard after verifying their email.
+
+Update: Disabled custom JavaScript execution specifically on the 'confirm_admin_email' action to ensure native form stability.
+
 = 2.0.9 =
 
 New: Added custom icon to the WordPress Plugins list for better recognition.
@@ -70,5 +80,3 @@ UX: Added real-time password strength meter and "Please wait..." loading states 
 Accessibility: Added missing ARIA labels, improved focus indicators for social icons, and ensured WCAG 2.1 AA contrast compliance.
 
 Dev: Added self-healing asset logic to fallback gracefully if files are missing.
-
-=
