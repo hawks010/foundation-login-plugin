@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name:       Foundation Inkfire Login - Enterprise Gold
+ * Plugin Name:       Foundation - Inkfire Login
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
  * Version:           2.0.18
