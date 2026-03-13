@@ -157,6 +157,16 @@ class IFLS_Enterprise_Security {
     public function add_csrf_tokens() { wp_nonce_field('ifls_form_action', 'ifls_form_nonce'); }
     
     public function verify_csrf_token() {
+        if (defined('WP_CLI') && WP_CLI) {
+            return;
+        }
+
+        // WooCommerce uses its own lost-password nonce and does not include the
+        // custom IFLS field on the My Account reset form.
+        if (isset($_POST['woocommerce-lost-password-nonce'])) {
+            return;
+        }
+
         if (!isset($_POST['ifls_form_nonce']) || !wp_verify_nonce($_POST['ifls_form_nonce'], 'ifls_form_action')) {
             wp_die(__('Security check failed.', 'inkfire-login-styler'), __('Error', 'inkfire-login-styler'), ['response' => 403]);
         }
