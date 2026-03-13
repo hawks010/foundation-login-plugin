@@ -3,7 +3,7 @@
  * Plugin Name:       Foundation - Inkfire Login
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
- * Version:           2.0.20
+ * Version:           2.0.21
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
@@ -200,8 +200,8 @@ class IFLS_Asset_Manager {
         $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
         $js_path  = plugin_dir_path(__FILE__) . 'assets/inkfire-login.js';
         
-        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.20';
-        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.20';
+        $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.21';
+        $js_ver  = file_exists($js_path) ? filemtime($js_path) : '2.0.21';
         
         wp_enqueue_style('inkfire-login', self::get_asset_url('css'), [], $css_ver);
         
@@ -467,7 +467,7 @@ function ifls_render_login_layout() {
 }
 
 function ifls_plugin_row_meta($links, $file) {
-    if (plugin_basename(__FILE__) === $file) $links[] = '<strong>Enterprise Gold v2.0.20</strong>';
+    if (plugin_basename(__FILE__) === $file) $links[] = '<strong>Enterprise Gold v2.0.21</strong>';
     return $links;
 }
 
@@ -507,12 +507,12 @@ add_action('admin_head', 'ifls_add_plugin_icon');
 
 add_action('admin_enqueue_scripts', function() {
     $css_path = plugin_dir_path(__FILE__) . 'assets/inkfire-login.css';
-    $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.20';
+    $css_ver = file_exists($css_path) ? filemtime($css_path) : '2.0.21';
     wp_enqueue_style('inkfire-login', plugins_url('assets/inkfire-login.css', __FILE__), [], $css_ver);
     wp_add_inline_style('inkfire-login', IFLS_Asset_Manager::generate_css_variables());
 });
 
-register_activation_hook(__FILE__, function() { add_option('ifls_installed_version', '2.0.20'); });
+register_activation_hook(__FILE__, function() { add_option('ifls_installed_version', '2.0.21'); });
 
 add_filter('login_headerurl', 'ifls_login_header_url');
 add_filter('login_headertext', 'ifls_login_header_text');

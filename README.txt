@@ -3,7 +3,7 @@ Contributors: Inkfire
 Tags: login, branding, security, custom login
 Requires at least: 6.0
 Tested up to: 6.6
-Stable tag: 2.0.18
+Stable tag: 2.0.21
 Requires PHP: 7.4
 License: GPLv2 or later
 
@@ -42,6 +42,12 @@ The plugin includes a self-hosted updater. When a new release is available on Gi
 This is a "Gold Master" plugin with hardcoded branding to ensure consistency across all client sites. To change branding, you must modify the assets/ folder and inkfire-login-styler.php in the source code.
 
 == Changelog ==
+
+= 2.0.21 =
+
+Fix: Allow WooCommerce lost-password requests to pass through without the custom IFLS nonce so customer password reset emails are not blocked.
+
+Fix: Allow WP-CLI and admin-triggered password reset flows to run without tripping the front-end CSRF gate.
 
 = 2.0.18 =
 
