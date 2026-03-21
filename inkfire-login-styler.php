@@ -3,7 +3,7 @@
  * Plugin Name:       Foundation - Inkfire Login
  * Plugin URI:        https://github.com/hawks010/foundation-login-plugin/
  * Description:       Enterprise-grade login customizer. Secure, responsive, and branded.
- * Version:           2.0.21
+ * Version:           2.0.22
  * Author:            Inkfire
  * Author URI:        https://inkfire.co.uk/
  * Text Domain:       inkfire-login-styler
@@ -295,10 +295,17 @@ function ifls_render_inline_form($action) {
             'id_remember' => 'if_rememberme',
             'id_submit' => 'if_wp_submit',
         ]);
+        $form_html = str_replace(
+            '</form>',
+            '<input type="hidden" name="testcookie" value="1" /></form>',
+            $form_html
+        );
         $heading = '<h2 class="if-card-title">' . esc_html(ifls_heading_text(__('Sign in to', 'inkfire-login-styler'))) . '</h2>';
         $message = '';
         if (ifls_sanitize_request('loggedout') === 'true') $message = '<p class="message info">' . __('You are now logged out.', 'inkfire-login-styler') . '</p>';
         elseif (ifls_sanitize_request('registration') === 'disabled') $message = '<p class="error">' . __('Registration is disabled.', 'inkfire-login-styler') . '</p>';
+        $message .= login_messages();
+        $message .= login_errors();
         return $heading . $message . $form_html;
     }
     
